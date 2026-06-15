@@ -2,7 +2,6 @@ using UnityEngine;
 using UnityEngine.InputSystem;
 using System.Collections.Generic;
 
-// Alias pour lever l'ambiguïté entre UnityEngine.XR.InputDevice et UnityEngine.InputSystem.InputDevice
 using XRInputDevice = UnityEngine.XR.InputDevice;
 using XRCommonUsages = UnityEngine.XR.CommonUsages;
 using InputDevices = UnityEngine.XR.InputDevices;
