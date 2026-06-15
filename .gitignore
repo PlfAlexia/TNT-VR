@@ -1,0 +1,28 @@
+# Dossiers générés automatiquement par Unity
+Library/
+Temp/
+Obj/
+Build/
+Builds/
+Logs/
+UserSettings/
+MemoryCaptures/
+
+# Fichiers de cache
+*.pidb
+*.suo
+*.tmp
+*.user
+*.userprefs
+*.unityproj
+*.DS_Store
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.csproj
+*.sln
+
+# Android
+*.apk
+*.aab
