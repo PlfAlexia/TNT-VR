@@ -27,7 +27,10 @@ public class DataManager : MonoBehaviour
             "is_target," +
             "response," +
             "rt_ms," +
-            "correct"
+            "correct," +
+            "sound_type," +
+            "sound_direction," +
+            "sound_time_ms"
         );
         writer.Flush();
 
@@ -48,22 +51,32 @@ public class DataManager : MonoBehaviour
         bool isTarget,
         string response,
         float rt,
-        int correct)
+        int correct,
+        string soundType,
+        string soundDirection,
+        float soundTime)
     {
         // rt < 0 ou "none" == pas de réponse dans la fenêtre
         string rtStr = (response == "none" || rt < 0f)
             ? "NaN"
             : Mathf.RoundToInt(rt * 1000f).ToString();
 
+        string soundTimeStr = soundTime < 0f 
+            ? "NaN" 
+            : Mathf.RoundToInt(soundTime * 1000f).ToString();
+
         string line = string.Join(",",
-            blockIndex,
-            nBack,
-            trialIndex,
-            $"\"{operation}\"",   // guillemets pour les espaces dans l'opération
-            isTarget ? "1" : "0",
-            response,
-            rtStr,
-            correct
+                blockIndex,
+                nBack,
+                trialIndex,
+                $"\"{operation}\"",   // guillemets pour les espaces dans l'opération
+                isTarget ? "1" : "0",
+                response,
+                rtStr,
+                correct,
+                soundType,
+                soundDirection,
+                soundTimeStr
         );
 
         writer.WriteLine(line);

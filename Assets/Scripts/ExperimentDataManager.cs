@@ -13,6 +13,7 @@ public class ExperimentManager : MonoBehaviour
     public StimulusManager stimulusManager;
     public ResponseManager responseManager;
     public DataManager dataManager;
+    public SoundManager soundManager;
 
     private List<Block> allBlocks;
     private int currentBlockIdx = 0;
@@ -152,6 +153,11 @@ public class ExperimentManager : MonoBehaviour
             Block block = allBlocks[currentBlockIdx];
             currentN = block.N;
 
+            // Générer le plan de sons pour ce bloc
+            List<bool> isTargetSeq = new List<bool>();
+            foreach (Stimulus s in block.Sequence) isTargetSeq.Add(s.IsTarget);
+            List<TrialSound> soundPlan = soundManager.GenerateBlockSoundPlan(isTargetSeq);
+
             // Instructions au début de chaque condition (blocs 0, 10, 20)
             if (currentBlockIdx == 0 || currentBlockIdx == 10 || currentBlockIdx == 20)
             {
@@ -169,7 +175,7 @@ public class ExperimentManager : MonoBehaviour
             for (currentTrialIdx = 0; currentTrialIdx < TRIALS_PAR_BLOC; currentTrialIdx++)
             {
                 Stimulus stimulus = block.Sequence[currentTrialIdx];
-                yield return StartCoroutine(RunTrial(stimulus));
+                yield return StartCoroutine(RunTrial(stimulus, currentTrialIdx, soundPlan));
 
                 if (currentTrialIdx < TRIALS_PAR_BLOC - 1)
                 {
@@ -194,12 +200,15 @@ public class ExperimentManager : MonoBehaviour
     }
 
     // Déroulement d'un trial 
-    private IEnumerator RunTrial(Stimulus stimulus)
+    private IEnumerator RunTrial(Stimulus stimulus, int trialIndex, List<TrialSound> soundPlan)
     {
         responseManager.ResetResponse();
 
         stimulusManager.ShowStimulus(stimulus.Operation);
         float stimulusOnset = Time.time;
+
+        // Son joué à l'onset du stimulus
+        soundManager.PlayIfScheduled(trialIndex, soundPlan);
 
         yield return new WaitForSeconds(DUREE_STIMULUS);
 
@@ -222,7 +231,10 @@ public class ExperimentManager : MonoBehaviour
             stimulus.IsTarget,
             response,
             rt,
-            correct
+            correct,
+            soundManager.GetLastSoundType(),
+            soundManager.GetLastSoundDirection(),
+            soundManager.GetLastSoundTime()
         );
     }
 
