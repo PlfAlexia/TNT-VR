@@ -1,48 +1,38 @@
-using System;
+ï»¿using System;
 using System.IO;
 using UnityEngine;
 
 public class DataManager : MonoBehaviour
 {
-    // Fichier CSV 
     private StreamWriter writer;
     private string filePath;
 
-    // Initialisation 
     void Awake()
     {
-        // Nom de fichier horodaté pour éviter les écrasements
         string timestamp = DateTime.Now.ToString("yyyy-MM-dd_HH-mm-ss");
         string fileName = $"nback_{timestamp}.csv";
         filePath = Path.Combine(Application.persistentDataPath, fileName);
-
         writer = new StreamWriter(filePath, append: false);
 
-        // En-tête CSV
         writer.WriteLine(
+            "experiment_time_ms," +
             "block_index," +
-            "n_back," +
             "trial_index," +
+            "n_back," +
             "operation," +
             "is_target," +
             "response," +
             "rt_ms," +
             "correct," +
             "sound_type," +
+            "sound_name," +
             "sound_direction," +
             "sound_time_ms"
         );
         writer.Flush();
-
-        Debug.Log($"[DataManager] Fichier CSV créé : {filePath}");
+        Debug.Log($"[DataManager] Fichier CSV crÃ©Ã© : {filePath}");
     }
 
-    // Enregistrement d'un trial 
-    /// <summary>
-    /// Sauvegarde les données d'un trial dans le CSV.
-    /// rt est un temps absolu (Time.time) — on le stocke en ms relatif au début du stimulus.
-    /// </summary>
- 
     public void SaveTrial(
         int blockIndex,
         int nBack,
@@ -53,32 +43,34 @@ public class DataManager : MonoBehaviour
         float rt,
         int correct,
         string soundType,
+        string soundName,
         string soundDirection,
-        float soundTime)
+        float soundTime,
+        float experimentTime)
     {
-        // rt < 0 ou "none" == pas de réponse dans la fenêtre
         string rtStr = (response == "none" || rt < 0f)
             ? "NaN"
             : Mathf.RoundToInt(rt * 1000f).ToString();
-
-        string soundTimeStr = soundTime < 0f 
-            ? "NaN" 
+        string soundTimeStr = soundTime < 0f
+            ? "NaN"
             : Mathf.RoundToInt(soundTime * 1000f).ToString();
+        string experimentTimeStr = Mathf.RoundToInt(experimentTime * 1000f).ToString();
 
         string line = string.Join(",",
-                blockIndex,
-                nBack,
-                trialIndex,
-                $"\"{operation}\"",   // guillemets pour les espaces dans l'opération
-                isTarget ? "1" : "0",
-                response,
-                rtStr,
-                correct,
-                soundType,
-                soundDirection,
-                soundTimeStr
+            experimentTimeStr,
+            blockIndex,
+            trialIndex,
+            nBack,
+            $"\"{operation}\"",
+            isTarget ? "1" : "0",
+            response,
+            rtStr,
+            correct,
+            soundType,
+            soundName,
+            soundDirection,
+            soundTimeStr
         );
-
         writer.WriteLine(line);
         writer.Flush();
     }
@@ -90,11 +82,10 @@ public class DataManager : MonoBehaviour
             writer.Flush();
             writer.Close();
             writer = null;
-            Debug.Log($"[DataManager] Fichier CSV fermé : {filePath}");
+            Debug.Log($"[DataManager] Fichier CSV fermÃ© : {filePath}");
         }
     }
 
-    // Sécurité si l'objet est détruit sans CloseFile() 
     void OnDestroy()
     {
         CloseFile();

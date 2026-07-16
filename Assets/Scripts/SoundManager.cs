@@ -1,4 +1,5 @@
-using UnityEngine;
+﻿using UnityEngine;
+using System.Collections;
 using System.Collections.Generic;
 
 public class SoundManager : MonoBehaviour
@@ -7,173 +8,255 @@ public class SoundManager : MonoBehaviour
     public AudioClip[] startleClips;
     public AudioClip neutralClip;
 
-    [Header("Spatial Settings")]
-    public float soundDistance = 2f; // distance en m�tres autour de la t�te
+    [Header("Background Music")]
+    public AudioClip backgroundMusic;
 
-    private AudioSource audioSource;
+    [Header("Gamme de Shepard (jouée en boucle pendant les blocs réels uniquement)")]
+    public AudioClip shepardClip; // clip représentant UN cycle complet de la gamme
+
+    [Header("Spatial Settings")]
+    public float soundDistance = 2f;
+
+    [Header("Volumes")]
+    [Range(0f, 1f)] public float musicVolume = 0.4f;
+    [Range(0f, 1f)] public float sfxVolume = 1f;
+    [Range(0f, 1f)] public float shepardVolume = 0.5f;
+
+    private AudioSource sfxSource;
+    private AudioSource musicSource;
+    private AudioSource shepardSource;
     private Camera vrCamera;
 
-    // Directions possibles
     public enum SoundDirection { Front, Back, Left, Right }
 
-    // R�sultat du dernier son jou� (pour le logging)
     private string lastSoundType = "none";
     private string lastSoundDirection = "none";
     private float lastSoundTime = -1f;
+    private string lastSoundName = "none";
+
+    // --- État de la gamme de Shepard ---
+    private bool shepardPlaying = false;
+    private double shepardCycleStartDspTime = -1.0;
+    private float shepardCycleDuration = 12f; // valeur par défaut, recalculée depuis shepardClip.length au démarrage
+    private double shepardPauseStartDspTime = -1.0; // -1 = pas en pause
 
     void Awake()
     {
-        audioSource = gameObject.AddComponent<AudioSource>();
-        audioSource.spatialBlend = 1f; // 100% 3D
-        audioSource.rolloffMode = AudioRolloffMode.Linear;
-        audioSource.minDistance = 0.5f;
-        audioSource.maxDistance = soundDistance * 2f;
+        // AudioSource pour les effets sonores (startles)
+        sfxSource = gameObject.AddComponent<AudioSource>();
+        sfxSource.spatialBlend = 1f;
+        sfxSource.rolloffMode = AudioRolloffMode.Linear;
+        sfxSource.minDistance = 0.5f;
+        sfxSource.maxDistance = soundDistance * 2f;
+
+        // AudioSource pour la musique de fond
+        musicSource = gameObject.AddComponent<AudioSource>();
+        musicSource.spatialBlend = 0f; // Son 2D
+        musicSource.loop = true;
+        musicSource.playOnAwake = false;
+
+        // AudioSource dédiée à la gamme de Shepard (2D, en boucle, pilotée manuellement)
+        shepardSource = gameObject.AddComponent<AudioSource>();
+        shepardSource.spatialBlend = 0f;
+        shepardSource.loop = true;
+        shepardSource.playOnAwake = false;
+
+        sfxSource.volume = sfxVolume;
+        musicSource.volume = musicVolume;
+        shepardSource.volume = shepardVolume;
+
+        if (backgroundMusic != null)
+        {
+            musicSource.clip = backgroundMusic;
+            musicSource.Play();
+        }
+
         vrCamera = Camera.main;
     }
 
-    /// <summary>
-    /// G�n�re le plan de sons pour un bloc.
-    /// Retourne une liste de (trialIndex, soundType, direction) ou null si pas de son.
-    /// </summary>
-    public List<TrialSound> GenerateBlockSoundPlan(List<bool> isTargetSequence)
+    // =====================================================================
+    // GAMME DE SHEPARD — boucle continue pendant les blocs réels
+    // =====================================================================
+
+    /// <summary>Démarre la gamme de Shepard en boucle continue (appelé une seule fois, au premier bloc réel).</summary>
+    public void StartShepardLoop()
     {
-        // Identifier les indices target et non-target
-        List<int> targetIndices = new List<int>();
-        List<int> nonTargetIndices = new List<int>();
-
-        for (int i = 0; i < isTargetSequence.Count; i++)
+        if (shepardClip == null)
         {
-            if (isTargetSequence[i]) targetIndices.Add(i);
-            else nonTargetIndices.Add(i);
-        }
-
-        // Shuffler les deux listes
-        Shuffle(targetIndices);
-        Shuffle(nonTargetIndices);
-
-        // S�lectionner 3 targets et 3 non-targets
-        List<int> chosenTargets = targetIndices.GetRange(0, Mathf.Min(3, targetIndices.Count));
-        List<int> chosenNonTargets = nonTargetIndices.GetRange(0, Mathf.Min(3, nonTargetIndices.Count));
-
-        // Les 2 random : parmi les trials restants
-        List<int> remaining = new List<int>();
-        for (int i = 0; i < isTargetSequence.Count; i++)
-        {
-            if (!chosenTargets.Contains(i) && !chosenNonTargets.Contains(i))
-                remaining.Add(i);
-        }
-        Shuffle(remaining);
-        List<int> chosenRandom = remaining.GetRange(0, Mathf.Min(2, remaining.Count));
-
-        // Assigner startle/neutre �quitablement dans chaque cat�gorie
-        // 3 avant target  : 2 startle + 1 neutre  (ou 1+2 � on alterne par bloc)
-        // 3 avant nonTarget : idem invers�
-        // 2 random : 1 startle + 1 neutre
-        List<string> targetTypes = ShuffledTypes(new List<string> { "startle", "startle", "neutral" });
-        List<string> nonTargetTypes = ShuffledTypes(new List<string> { "startle", "neutral", "neutral" });
-        List<string> randomTypes = ShuffledTypes(new List<string> { "startle", "neutral" });
-
-        // G�n�rer 8 directions �quilibr�es (2 par direction)
-        List<SoundDirection> directions = ShuffledDirections();
-
-        // Assembler le plan
-        List<TrialSound> plan = new List<TrialSound>();
-        int dirIdx = 0;
-
-        for (int i = 0; i < chosenTargets.Count; i++)
-            plan.Add(new TrialSound(chosenTargets[i], targetTypes[i], directions[dirIdx++]));
-
-        for (int i = 0; i < chosenNonTargets.Count; i++)
-            plan.Add(new TrialSound(chosenNonTargets[i], nonTargetTypes[i], directions[dirIdx++]));
-
-        for (int i = 0; i < chosenRandom.Count; i++)
-            plan.Add(new TrialSound(chosenRandom[i], randomTypes[i], directions[dirIdx++]));
-
-        return plan;
-    }
-
-    /// <summary>Joue le son associ� � ce trial s'il en a un.</summary>
-    public void PlayIfScheduled(int trialIndex, List<TrialSound> plan)
-    {
-        TrialSound scheduled = plan.Find(s => s.TrialIndex == trialIndex);
-        if (scheduled == null)
-        {
-            lastSoundType = "none";
-            lastSoundDirection = "none";
-            lastSoundTime = -1f;
+            Debug.LogError("[SoundManager] shepardClip non assigné dans l'inspecteur — impossible de démarrer la gamme de Shepard.");
             return;
         }
 
-        // Positionner l'AudioSource selon la direction relative � la t�te
-        Vector3 dir = GetDirectionVector(scheduled.Direction);
-        audioSource.transform.position = vrCamera.transform.position + dir * soundDistance;
+        shepardSource.clip = shepardClip;
+        shepardSource.volume = shepardVolume;
+        shepardSource.Play();
 
-        // Jouer le bon clip
-        AudioClip clip = scheduled.Type == "startle"
-        ? startleClips[Random.Range(0, startleClips.Length)]
-        : neutralClip;
-        audioSource.PlayOneShot(clip);
-
-        // Logguer
-        lastSoundType = scheduled.Type;
-        lastSoundDirection = scheduled.Direction.ToString();
-        lastSoundTime = Time.time;
+        shepardCycleDuration = shepardClip.length;
+        shepardCycleStartDspTime = AudioSettings.dspTime;
+        shepardPlaying = true;
     }
 
-    // Accesseurs pour DataManager
-    public string GetLastSoundType() => lastSoundType;
-    public string GetLastSoundDirection() => lastSoundDirection;
-    public float GetLastSoundTime() => lastSoundTime;
-
-    // Calcule le vecteur 3D relatif � la t�te du joueur
-    private Vector3 GetDirectionVector(SoundDirection dir)
+    /// <summary>Arrête la gamme de Shepard (appelé à la fin de l'expérience).</summary>
+    public void StopShepardLoop()
     {
-        Transform cam = vrCamera.transform;
-        switch (dir)
+        if (!shepardPlaying) return;
+
+        shepardSource.Stop();
+        shepardPlaying = false;
+        shepardCycleStartDspTime = -1.0;
+        shepardPauseStartDspTime = -1.0;
+    }
+
+    /// <summary>
+    /// Met en pause la gamme de Shepard (consignes, pauses/repos entre blocs) sans
+    /// perdre la position de lecture ni désynchroniser le cycle utilisé pour les startles.
+    /// Sans effet si la gamme n'est pas en cours de lecture.
+    /// </summary>
+    public void PauseShepardLoop()
+    {
+        if (!shepardPlaying) return;
+        if (shepardPauseStartDspTime >= 0.0) return; // déjà en pause
+
+        shepardSource.Pause();
+        shepardPauseStartDspTime = AudioSettings.dspTime;
+    }
+
+    /// <summary>
+    /// Reprend la gamme de Shepard après une pause, exactement où elle s'était arrêtée.
+    /// Décale l'origine du cycle (shepardCycleStartDspTime) de la durée de la pause pour
+    /// que GetTimeUntilNextCycleEnd() reste cohérent avec la position réelle de lecture.
+    /// </summary>
+    public void ResumeShepardLoop()
+    {
+        if (!shepardPlaying) return;
+        if (shepardPauseStartDspTime < 0.0) return; // n'était pas en pause
+
+        double pausedDuration = AudioSettings.dspTime - shepardPauseStartDspTime;
+        shepardCycleStartDspTime += pausedDuration;
+        shepardPauseStartDspTime = -1.0;
+
+        shepardSource.UnPause();
+    }
+
+    /// <summary>Temps restant (en secondes) avant la fin du cycle de Shepard actuellement en cours.</summary>
+    private float GetTimeUntilNextCycleEnd()
+    {
+        if (!shepardPlaying)
         {
-            case SoundDirection.Front: return cam.forward;
-            case SoundDirection.Back: return -cam.forward;
-            case SoundDirection.Left: return -cam.right;
-            case SoundDirection.Right: return cam.right;
-            default: return cam.forward;
+            Debug.LogWarning("[SoundManager] Gamme de Shepard non active — le startle sera joué immédiatement.");
+            return 0f;
+        }
+
+        double elapsed = AudioSettings.dspTime - shepardCycleStartDspTime;
+        double elapsedInCycle = elapsed % shepardCycleDuration;
+        double remaining = shepardCycleDuration - elapsedInCycle;
+
+        // Évite un redémarrage quasi immédiat (arrondi flottant) qui reviendrait à jouer en plein cycle
+        if (remaining < 0.01) remaining = shepardCycleDuration;
+
+        return (float)remaining;
+    }
+
+    // =====================================================================
+    // STARTLES — armés à un trial donné, mais joués uniquement en fin de cycle
+    // =====================================================================
+
+    /// <summary>
+    /// "Arme" un startle planifié : il ne sera réellement joué qu'à la toute fin
+    /// du cycle de Shepard en cours (jamais en plein milieu). Ne bloque pas
+    /// l'expérience : le déroulement des trials continue normalement pendant l'attente.
+    /// </summary>
+    public void RequestStartle(TrialSound sound)
+    {
+        StartCoroutine(PlayStartleAtCycleEndRoutine(sound));
+    }
+
+    private IEnumerator PlayStartleAtCycleEndRoutine(TrialSound sound)
+    {
+        float waitTime = GetTimeUntilNextCycleEnd();
+        if (waitTime > 0f)
+            yield return new WaitForSeconds(waitTime);
+
+        PlaySoundNow(sound);
+    }
+
+    private void PlaySoundNow(TrialSound sound)
+    {
+        Vector3 dir = GetDirectionVector(sound.Direction);
+        sfxSource.transform.position = vrCamera.transform.position + dir * soundDistance;
+
+        AudioClip clip;
+        if (sound.Type == "startle")
+        {
+            if (startleClips == null || startleClips.Length == 0)
+            {
+                Debug.LogError("[SoundManager] startleClips est vide ou non assigné dans l'inspecteur — impossible de jouer le son startle.");
+                return;
+            }
+            clip = startleClips[Random.Range(0, startleClips.Length)];
+        }
+        else
+        {
+            clip = neutralClip;
+        }
+
+        sfxSource.PlayOneShot(clip);
+
+        lastSoundType = sound.Type;
+        lastSoundDirection = sound.Direction.ToString();
+        lastSoundTime = Time.time;
+        lastSoundName = clip != null ? clip.name : "none";
+
+        // Coupe la gamme de Shepard dès qu'un startle est joué ; elle reste en pause
+        // jusqu'à la fin du bloc en cours et ne reprendra qu'au bloc suivant (cf.
+        // ExperimentManager, qui appelle ResumeShepardLoop() au tout début de
+        // chaque nouveau bloc).
+        if (sound.Type == "startle")
+        {
+            PauseShepardLoop();
         }
     }
 
-    private List<SoundDirection> ShuffledDirections()
+    /// <summary>
+    /// Récupère les infos du dernier son joué ET les remet à "none" dans la foulée.
+    /// Garantit qu'un événement sonore n'est reporté qu'une seule fois dans le CSV
+    /// (sur le trial pendant lequel il a réellement été joué), au lieu de rester
+    /// affiché indéfiniment sur tous les trials suivants.
+    /// </summary>
+    public (string type, string direction, float time, string name) ConsumeLastSound()
     {
-        List<SoundDirection> dirs = new List<SoundDirection>
-        {
-            SoundDirection.Front, SoundDirection.Front,
-            SoundDirection.Back,  SoundDirection.Back,
-            SoundDirection.Left,  SoundDirection.Left,
-            SoundDirection.Right, SoundDirection.Right
-        };
-        Shuffle(dirs);
-        return dirs;
+        var result = (lastSoundType, lastSoundDirection, lastSoundTime, lastSoundName);
+        lastSoundType = "none";
+        lastSoundDirection = "none";
+        lastSoundTime = -1f;
+        lastSoundName = "none";
+        return result;
     }
 
-    private List<string> ShuffledTypes(List<string> types)
+    private Vector3 GetDirectionVector(SoundDirection dir)
     {
-        List<string> copy = new List<string>(types);
-        Shuffle(copy);
-        return copy;
-    }
+        Transform cam = vrCamera.transform;
 
-    private void Shuffle<T>(List<T> list)
-    {
-        for (int i = list.Count - 1; i > 0; i--)
+        switch (dir)
         {
-            int j = Random.Range(0, i + 1);
-            T tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+            case SoundDirection.Front:
+                return cam.forward;
+            case SoundDirection.Back:
+                return -cam.forward;
+            case SoundDirection.Left:
+                return -cam.right;
+            case SoundDirection.Right:
+                return cam.right;
+            default:
+                return cam.forward;
         }
     }
 }
 
-/// <summary>Repr�sente un son planifi� pour un trial donn�.</summary>
 public class TrialSound
 {
     public int TrialIndex;
-    public string Type;         // "startle" ou "neutral"
+    public string Type;
     public SoundManager.SoundDirection Direction;
 
     public TrialSound(int idx, string type, SoundManager.SoundDirection dir)

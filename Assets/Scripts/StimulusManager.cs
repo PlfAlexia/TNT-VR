@@ -1,4 +1,4 @@
-using UnityEngine;
+ï»¿using UnityEngine;
 using TMPro;
 
 public class StimulusManager : MonoBehaviour
@@ -6,6 +6,7 @@ public class StimulusManager : MonoBehaviour
     [Header("UI References")]
     public TextMeshProUGUI textOperation;
     public TextMeshProUGUI textInstruction;
+    public TextMeshProUGUI textTimer;
 
     void Awake()
     {
@@ -27,7 +28,7 @@ public class StimulusManager : MonoBehaviour
     public void ShowFixation()
     {
         textOperation.gameObject.SetActive(true);
-        textOperation.text = "+";
+        textOperation.text = "X";
     }
 
     public void HideFixation()
@@ -35,16 +36,19 @@ public class StimulusManager : MonoBehaviour
         textOperation.gameObject.SetActive(false);
     }
 
-    public void ShowRest()
+    public void ShowRest(int secondsRemaining)
     {
-        textInstruction.gameObject.SetActive(false);
         textOperation.gameObject.SetActive(true);
-        textOperation.text = "00 + 00";
+        textOperation.text = "00+00";
+
+        textTimer.gameObject.SetActive(true);
+        textTimer.text = secondsRemaining.ToString();
     }
 
     public void HideRest()
     {
         textOperation.gameObject.SetActive(false);
+        textTimer.gameObject.SetActive(false);
     }
 
     public void ShowInstruction(string message)
@@ -63,12 +67,13 @@ public class StimulusManager : MonoBehaviour
     {
         ClearAll();
         textInstruction.gameObject.SetActive(true);
-        textInstruction.text = "Expérience terminée.\nMerci pour votre participation.";
+        textInstruction.text = "ExpÃ©rience terminÃ©e.\nMerci pour votre participation.";
     }
 
     private void ClearAll()
     {
         if (textOperation != null) textOperation.gameObject.SetActive(false);
         if (textInstruction != null) textInstruction.gameObject.SetActive(false);
+        if (textTimer != null) textTimer.gameObject.SetActive(false);
     }
 }

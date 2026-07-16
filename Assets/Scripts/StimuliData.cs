@@ -22,7 +22,7 @@ public static class StimuliData
     {
         new Stimulus("30 + 20", 50,  true),
         new Stimulus("75 - 10", 65,  false),
-        new Stimulus("45 + 5",  50,  true),
+        new Stimulus("45 +  5", 50,  true),
         new Stimulus("60 + 25", 85,  false),
         new Stimulus("95 - 45", 50,  true),
         new Stimulus("20 + 35", 55,  false),
