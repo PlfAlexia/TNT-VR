@@ -62,6 +62,7 @@ public class ExperimentManager : MonoBehaviour
     {
         experimentStartTime = Time.time; // ← t0 = lancement Unity
         headMotionTracker.SetStartTime(experimentStartTime); // même t0 pour headmotion.csv et nback.csv
+        soundManager.SetStartTime(experimentStartTime); // même t0 pour sound_time_ms (nback.csv)
         allBlocks = GenerateAllBlocks();
         soundSchedule = GenerateSoundSchedule();
         StartCoroutine(RunExperiment());
@@ -241,6 +242,11 @@ public class ExperimentManager : MonoBehaviour
 
             if (instructionBlocks.Contains(currentBlockIdx))
             {
+                // Pendant les consignes (et la fixation qui suit), aucun trial n'est en cours :
+                // on force trial_index = -1 dans headmotion.csv pour ne pas laisser traîner
+                // l'index du dernier trial du bloc précédent, ce qui prêterait à confusion.
+                headMotionTracker.SetCurrentTrial(-1);
+
                 soundManager.PauseShepardLoop();
 
                 responseManager.ClearConfirm();

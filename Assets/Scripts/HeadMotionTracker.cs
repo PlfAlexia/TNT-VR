@@ -48,7 +48,7 @@ public class HeadMotionTracker : MonoBehaviour
         writer.WriteLine("time_ms,block_index,trial_index,pos_x,pos_y,pos_z,acceleration_raw,acceleration_smoothed");
         writer.Flush();
 
-        Debug.Log($"[HeadMotionTracker] Fichier CSV cr�� : {filePath}");
+        Debug.Log($"[HeadMotionTracker] Fichier CSV crée : {filePath}");
     }
 
     void Update()

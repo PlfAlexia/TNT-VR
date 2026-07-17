@@ -34,11 +34,12 @@ public class SoundManager : MonoBehaviour
     private float lastSoundTime = -1f;
     private string lastSoundName = "none";
 
-    // --- État de la gamme de Shepard ---
     private bool shepardPlaying = false;
-    private double shepardCycleStartDspTime = -1.0;
-    private float shepardCycleDuration = 12f; // valeur par défaut, recalculée depuis shepardClip.length au démarrage
-    private double shepardPauseStartDspTime = -1.0; // -1 = pas en pause
+
+    // t0 commun avec ExperimentManager / HeadMotionTracker (Time.time au lancement de
+    // l'expérience). Tant que ExperimentManager n'a pas appelé SetStartTime, on retombe
+    // sur Time.time brut (comportement précédent) pour ne jamais planter.
+    private float startTime = -1f;
 
     void Awake()
     {
@@ -74,11 +75,15 @@ public class SoundManager : MonoBehaviour
         vrCamera = Camera.main;
     }
 
-    // =====================================================================
-    // GAMME DE SHEPARD — boucle continue pendant les blocs réels
-    // =====================================================================
+    /// <summary>
+    /// Appelé par ExperimentManager (même t0 que HeadMotionTracker.SetStartTime) pour que
+    /// sound_time_ms soit exprimé dans le même référentiel que experiment_time_ms.
+    /// </summary>
+    public void SetStartTime(float t0)
+    {
+        startTime = t0;
+    }
 
-    /// <summary>Démarre la gamme de Shepard en boucle continue (appelé une seule fois, au premier bloc réel).</summary>
     public void StartShepardLoop()
     {
         if (shepardClip == null)
@@ -90,55 +95,29 @@ public class SoundManager : MonoBehaviour
         shepardSource.clip = shepardClip;
         shepardSource.volume = shepardVolume;
         shepardSource.Play();
-
-        shepardCycleDuration = shepardClip.length;
-        shepardCycleStartDspTime = AudioSettings.dspTime;
         shepardPlaying = true;
     }
 
-    /// <summary>Arrête la gamme de Shepard (appelé à la fin de l'expérience).</summary>
     public void StopShepardLoop()
     {
         if (!shepardPlaying) return;
 
         shepardSource.Stop();
         shepardPlaying = false;
-        shepardCycleStartDspTime = -1.0;
-        shepardPauseStartDspTime = -1.0;
     }
 
-    /// <summary>
-    /// Met en pause la gamme de Shepard (consignes, pauses/repos entre blocs) sans
-    /// perdre la position de lecture ni désynchroniser le cycle utilisé pour les startles.
-    /// Sans effet si la gamme n'est pas en cours de lecture.
-    /// </summary>
     public void PauseShepardLoop()
     {
         if (!shepardPlaying) return;
-        if (shepardPauseStartDspTime >= 0.0) return; // déjà en pause
-
         shepardSource.Pause();
-        shepardPauseStartDspTime = AudioSettings.dspTime;
     }
 
-    /// <summary>
-    /// Reprend la gamme de Shepard après une pause, exactement où elle s'était arrêtée.
-    /// Décale l'origine du cycle (shepardCycleStartDspTime) de la durée de la pause pour
-    /// que GetTimeUntilNextCycleEnd() reste cohérent avec la position réelle de lecture.
-    /// </summary>
     public void ResumeShepardLoop()
     {
         if (!shepardPlaying) return;
-        if (shepardPauseStartDspTime < 0.0) return; // n'était pas en pause
-
-        double pausedDuration = AudioSettings.dspTime - shepardPauseStartDspTime;
-        shepardCycleStartDspTime += pausedDuration;
-        shepardPauseStartDspTime = -1.0;
-
         shepardSource.UnPause();
     }
 
-    /// <summary>Temps restant (en secondes) avant la fin du cycle de Shepard actuellement en cours.</summary>
     private float GetTimeUntilNextCycleEnd()
     {
         if (!shepardPlaying)
@@ -147,25 +126,14 @@ public class SoundManager : MonoBehaviour
             return 0f;
         }
 
-        double elapsed = AudioSettings.dspTime - shepardCycleStartDspTime;
-        double elapsedInCycle = elapsed % shepardCycleDuration;
-        double remaining = shepardCycleDuration - elapsedInCycle;
+        float remaining = shepardClip.length - shepardSource.time;
 
-        // Évite un redémarrage quasi immédiat (arrondi flottant) qui reviendrait à jouer en plein cycle
-        if (remaining < 0.01) remaining = shepardCycleDuration;
+        if (remaining < 0.01f) remaining = shepardClip.length;
 
-        return (float)remaining;
+        return remaining;
     }
 
-    // =====================================================================
-    // STARTLES — armés à un trial donné, mais joués uniquement en fin de cycle
-    // =====================================================================
 
-    /// <summary>
-    /// "Arme" un startle planifié : il ne sera réellement joué qu'à la toute fin
-    /// du cycle de Shepard en cours (jamais en plein milieu). Ne bloque pas
-    /// l'expérience : le déroulement des trials continue normalement pendant l'attente.
-    /// </summary>
     public void RequestStartle(TrialSound sound)
     {
         StartCoroutine(PlayStartleAtCycleEndRoutine(sound));
@@ -190,7 +158,7 @@ public class SoundManager : MonoBehaviour
         {
             if (startleClips == null || startleClips.Length == 0)
             {
-                Debug.LogError("[SoundManager] startleClips est vide ou non assigné dans l'inspecteur — impossible de jouer le son startle.");
+                Debug.LogError("[SoundManager] startleClips est vide ou non assigné dans l'inspecteur, impossible de jouer le son startle.");
                 return;
             }
             clip = startleClips[Random.Range(0, startleClips.Length)];
@@ -204,25 +172,15 @@ public class SoundManager : MonoBehaviour
 
         lastSoundType = sound.Type;
         lastSoundDirection = sound.Direction.ToString();
-        lastSoundTime = Time.time;
+        lastSoundTime = startTime >= 0f ? (Time.time - startTime) : Time.time;
         lastSoundName = clip != null ? clip.name : "none";
 
-        // Coupe la gamme de Shepard dès qu'un startle est joué ; elle reste en pause
-        // jusqu'à la fin du bloc en cours et ne reprendra qu'au bloc suivant (cf.
-        // ExperimentManager, qui appelle ResumeShepardLoop() au tout début de
-        // chaque nouveau bloc).
         if (sound.Type == "startle")
         {
             PauseShepardLoop();
         }
     }
 
-    /// <summary>
-    /// Récupère les infos du dernier son joué ET les remet à "none" dans la foulée.
-    /// Garantit qu'un événement sonore n'est reporté qu'une seule fois dans le CSV
-    /// (sur le trial pendant lequel il a réellement été joué), au lieu de rester
-    /// affiché indéfiniment sur tous les trials suivants.
-    /// </summary>
     public (string type, string direction, float time, string name) ConsumeLastSound()
     {
         var result = (lastSoundType, lastSoundDirection, lastSoundTime, lastSoundName);
