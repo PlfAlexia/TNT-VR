@@ -75,10 +75,8 @@ public class SoundManager : MonoBehaviour
         vrCamera = Camera.main;
     }
 
-    /// <summary>
     /// Appelé par ExperimentManager (même t0 que HeadMotionTracker.SetStartTime) pour que
     /// sound_time_ms soit exprimé dans le même référentiel que experiment_time_ms.
-    /// </summary>
     public void SetStartTime(float t0)
     {
         startTime = t0;

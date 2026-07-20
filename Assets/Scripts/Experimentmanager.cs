@@ -8,25 +8,19 @@ public class ExperimentManager : MonoBehaviour
     private const float DUREE_STIMULUS = 2f;
     private const float DUREE_FIXATION = 1f;
     private const float DUREE_REPOS = 18f;
-
-    // Index du premier bloc réel (0 et 1 sont les blocs de test) : c'est ici que
-    // la gamme de Shepard démarre, et elle tourne en continu jusqu'à la toute fin.
     private const int FIRST_REAL_BLOCK_INDEX = 2;
-
-    // =====================================================================
-    // MOMENTS D'APPARITION DES STARTLES — modifiables ici facilement
+=
+    // MOMENTS D'APPARITION DES STARTLES - modifiables ici facilement
     // Format : (blockIndex, trialIndex)
     // Blocs : 0 = test 1-back, 1 = test 2-back, 2-9 = 1-back, 10-17 = 2-back
     // trialIndex : 0 à 11 (éviter 0 et 11 = premier et dernier du bloc)
-    // =====================================================================
     private static readonly (int blockIdx, int trialIdx, string direction)[] STARTLE_SCHEDULE =
     {
-        (3,  5, ""),   // (avant ou arrière, 1-back) — direction tirée aléatoirement
-        (6,  7, ""),   // (avant ou arrière, 1-back)
-        (11, 4, ""),   // (avant ou arrière, 2-back)
-        (15, 8, ""),   // (avant ou arrière, 2-back)
+        (3,  5, ""),
+        (6,  7, ""),
+        (11, 4, ""),
+        (15, 8, ""),
     };
-    // =====================================================================
 
     public StimulusManager stimulusManager;
     public ResponseManager responseManager;
@@ -43,7 +37,7 @@ public class ExperimentManager : MonoBehaviour
     // Instructions aux blocs 0, 1 (tests), 2 (premier 1-back), 10 (premier 2-back)
     private HashSet<int> instructionBlocks = new HashSet<int> { 0, 1, 2, 10 };
 
-    // Plan de sons : (blockIdx, trialIdx) → TrialSound
+    // Plan de sons : (blockIdx, trialIdx), TrialSound
     private Dictionary<(int, int), TrialSound> soundSchedule;
 
     public class Block
@@ -60,8 +54,8 @@ public class ExperimentManager : MonoBehaviour
 
     void Start()
     {
-        experimentStartTime = Time.time; // ← t0 = lancement Unity
-        headMotionTracker.SetStartTime(experimentStartTime); // même t0 pour headmotion.csv et nback.csv
+        experimentStartTime = Time.time; // t0 = lancement Unity
+        headMotionTracker.SetStartTime(experimentStartTime); // même t0 pour headmotion.csv 
         soundManager.SetStartTime(experimentStartTime); // même t0 pour sound_time_ms (nback.csv)
         allBlocks = GenerateAllBlocks();
         soundSchedule = GenerateSoundSchedule();
@@ -227,7 +221,7 @@ public class ExperimentManager : MonoBehaviour
                 soundManager.StartShepardLoop();
 
             // Si un startle a été joué pendant le bloc précédent, la gamme de Shepard
-            // est restée en pause jusqu'à la fin de ce bloc-là ; on la reprend ici, au
+            // est restée en pause jusqu'à la fin de ce bloc-là, on la reprend donc ici, au
             // tout début du nouveau bloc (sans effet si elle n'était pas en pause, ou
             // si elle n'a pas encore démarré).
             soundManager.ResumeShepardLoop();
@@ -263,10 +257,8 @@ public class ExperimentManager : MonoBehaviour
 
             for (currentTrialIdx = 0; currentTrialIdx < TRIALS_PAR_BLOC; currentTrialIdx++)
             {
-                // Si un startle est planifié pour cet essai, on l'arme : il ne sera
-                // effectivement joué qu'à la fin du cycle de Shepard en cours (jamais
-                // en plein milieu). L'appel n'est pas bloquant, les trials continuent
-                // à s'enchaîner normalement pendant que le startle attend son tour.
+                // Si un startle est planifié pour cet essai, on l'arme. Il ne sera
+                // joué qu'à la fin du cycle de Shepard en cours (jamais en plein milieu).
                 TrialSound scheduledSound = soundPlan.Find(s => s.TrialIndex == currentTrialIdx);
                 if (scheduledSound != null)
                     soundManager.RequestStartle(scheduledSound);
@@ -316,11 +308,8 @@ public class ExperimentManager : MonoBehaviour
 
     private IEnumerator RunTrial(Stimulus stimulus, bool isTarget)
     {
-        // Synchronise HeadMotionTracker sur l'essai courant (Option B : jointure via block_index + trial_index)
+        // Synchronise HeadMotionTracker sur l'essai courant
         headMotionTracker.SetCurrentTrial(currentTrialIdx);
-
-        //if (experimentStartTime < 0f)
-        //experimentStartTime = Time.time;
 
         responseManager.ResetResponse();
 
@@ -340,9 +329,6 @@ public class ExperimentManager : MonoBehaviour
         int correct = ScoreResponse(response, isTarget);
         float experimentTime = stimulusOnset - experimentStartTime;
 
-        // Récupère (et consomme) le dernier son joué : chaque événement sonore n'est
-        // ainsi reporté qu'une seule fois, sur le trial pendant lequel il a réellement été joué
-        // (avant, un startle joué sur le trial 5 restait affiché sur tous les trials suivants).
         var soundInfo = soundManager.ConsumeLastSound();
 
         dataManager.SaveTrial(
@@ -362,13 +348,6 @@ public class ExperimentManager : MonoBehaviour
         );
     }
 
-    /// <summary>
-    /// Détermine si l'essai courant est un véritable "match" n-back : le résultat de l'opération
-    /// est identique à celui de l'opération n essais plus tôt DANS CE BLOC. On ne se fie plus au
-    /// champ statique Stimulus.IsTarget (qui marque toute "valeur cible" comme target, y compris sa
-    /// première apparition — alors que le participant n'a alors rien à quoi comparer). Avant la
-    /// n-ième position du bloc, aucun match n'est possible.
-    /// </summary>
     private bool IsRealNBackMatch(List<Stimulus> sequence, int trialIdx, int n)
     {
         if (trialIdx < n) return false;
@@ -406,7 +385,7 @@ public class ExperimentManager : MonoBehaviour
                    "Dans le cas contraire, appuyez sur la gâchette gauche.\n\n" +
                    "Pour commencer, appuyez sur le bouton Y (bouton supérieur gauche).";
         }
-        // blockIdx == 10 (premier bloc 2-back principal)
+
         return "Changement de consigne\n\n" +
                "Étape 2/2 (2-back)\n\n" +
                "Consigne : Appuyez le plus rapidement possible sur la gâchette droite si le résultat de l'opération est identique à celui de l'opération d'il y a 2 essais.\n" +
